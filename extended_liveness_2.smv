@@ -1,0 +1,84 @@
+-- Car ligh state module
+-- A. Initially red
+-- B. Turns green after 5 ticks
+-- C. Remains green for 9 ticks
+-- D. If a signal is received, remains green for 1 tick then turns yellow for 2. Else remains green and go back to D.
+-- E. Turns red and return to B.
+MODULE carLightState
+DEFINE
+	redTicks := 5;
+	greenTicks := 10;
+	yellowTicks := 2;
+	safetyTicks := 3;
+VAR
+	tick : 0 .. 16;
+	signal : boolean;
+	memorisedSignal : boolean;
+	ignoreTicks : 0 .. 16;
+
+	carLight : {red, yellow, green};
+	safeCross : boolean;
+
+ASSIGN
+
+	init(tick) := 0;
+	init(ignoreTicks) := 13;
+	init(memorisedSignal) := FALSE;
+
+	init(carLight) := red;
+	next(carLight) :=
+		case
+			tick = (redTicks - 1) : green;
+			tick = (redTicks + greenTicks -1) : yellow;
+			tick = (redTicks + greenTicks + yellowTicks -1) : red;
+			TRUE : carLight;
+		esac;
+
+	init(safeCross) := TRUE;
+	next(safeCross) := 
+		case
+			tick < (redTicks - safetyTicks) | tick = 16 : TRUE;
+			TRUE : FALSE;
+		esac;
+TRANS
+
+	case
+		tick = 2 : next(tick) = 2;
+
+		-- Light is waiting for a signal and a signal is triggered or has been triggered during the previous cycle
+		ignoreTicks = 0 & (memorisedSignal = TRUE | signal = TRUE) : next(tick) = ((tick + 1) mod 17) & next(ignoreTicks) = 16 & next(memorisedSignal) = FALSE;
+
+		-- Light is waiting for a signal but the signal is not triggered : remains green (stuck at tick 13)
+		ignoreTicks = 0 & memorisedSignal = FALSE : next(tick) = tick & next(ignoreTicks) = ignoreTicks & next(memorisedSignal) = FALSE;
+
+		-- A signal has already been triggered but a new one occurs, so the lights works normally but the signal is memorised
+		ignoreTicks > 0 & signal = TRUE : next(tick) = ((tick + 1) mod 17) & next(ignoreTicks) = (ignoreTicks - 1) & next(memorisedSignal) = TRUE;
+		
+		-- A signal has already be received earlier, so the light works normally
+		TRUE : next(tick) = ((tick + 1) mod 17) & next(ignoreTicks) = (ignoreTicks - 1) & next(memorisedSignal) = memorisedSignal;
+	esac
+
+MODULE  pedestrianLightState(safeCross)
+VAR
+	pedestrianLight : {red, green};
+ASSIGN
+	init(pedestrianLight) := red;
+	next(pedestrianLight) := 
+		case
+			safeCross = TRUE : green;
+			TRUE : red;
+		esac;
+
+
+-- ignoreTicks is initialised at 14 so the car light will remains red 5 ticks then green 10 ticks at the beginning
+MODULE main
+VAR
+	carLightState : carLightState;
+	pedestrianLightState : pedestrianLightState(carLightState.safeCross);
+ASSIGN
+
+
+-- PROPERTIES --
+
+-- Liveness	
+LTLSPEC F(carLightState.signal = TRUE -> ( F carLightState.carLight = red U carLightState.carLight = green));	

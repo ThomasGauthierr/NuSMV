@@ -1,0 +1,75 @@
+-- Car ligh state module
+-- A. Initially red
+-- B. Turns green after 5 ticks
+-- C. Turns yellow after 10 ticks
+-- D. Returns to state A after 2 ticks 
+MODULE carLightState(initTick)
+DEFINE
+	redTicks := 5;
+	greenTicks := 10;
+	yellowTicks := 2;
+	safetyTicks := 3;
+VAR
+	tick : 0 .. 16;
+	carLight : {red, yellow, green};
+	safeCross : boolean;
+ASSIGN
+	init(tick) := initTick;
+	init(carLight) := red;
+
+	next(carLight) :=
+		case
+			tick = (redTicks - 1) : green;
+			tick = (redTicks + greenTicks -1) : yellow;
+			tick = (redTicks + greenTicks + yellowTicks -1) : red;
+			TRUE : carLight;
+		esac;
+
+	init(safeCross) := TRUE;
+	next(safeCross) := 
+		case
+			tick < (redTicks - safetyTicks) | tick = 16 : TRUE;
+			TRUE : FALSE;
+		esac;
+TRANS
+	case
+		TRUE : next(tick) = ((tick + 1) mod 17);
+	esac
+
+
+
+-- Pedestrian light state module
+-- Safety : The light must be red if the car light is green or yellow
+-- Liveness :The pedestrian light must turn green at some point.
+MODULE  pedestrianLightState(safeCross)
+VAR
+	pedestrianLight : {red, green};
+ASSIGN
+	init(pedestrianLight) := red;
+	next(pedestrianLight) := 
+		case
+			safeCross = TRUE : green;
+			TRUE : red;
+		esac;
+
+
+
+MODULE main
+VAR
+	carLightState : carLightState(0);
+	pedestrianLightState : pedestrianLightState(carLightState.safeCross);
+
+
+
+-- PROPERTIES --
+
+-- Liveness
+SPEC AF (pedestrianLightState.pedestrianLight = red & EX (pedestrianLightState.pedestrianLight = green)) & AF (carLightState.carLight = red & EX (carLightState.carLight = green));
+
+LTLSPEC F pedestrianLightState.pedestrianLight = green & F carLightState.carLight = green;	
+
+
+-- Safety
+SPEC !EF (pedestrianLightState.pedestrianLight = green & carLightState.carLight != red); 
+
+LTLSPEC G (pedestrianLightState.pedestrianLight = green -> carLightState.carLight = red);
